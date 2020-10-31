@@ -1,22 +1,28 @@
 #include <sourcemod>
 
+#define JOB_MINUTE				0
+#define JOB_HOUR				1
+#define JOB_DAY_OF_THE_MONTH	2
+#define JOB_MONTH				3
+#define JOB_DAY_OF_THE_WEEK		4
+#define JOB_TIME_SIZE			5
+#define ASTERISK	0x2a
+
 #pragma semicolon 1
 #pragma newdecls required
 
 Database g_hDatabase = null;
-
+Handle g_hJobsTimer;
 bool isVisible[MAXPLAYERS + 1] =  { true, ... };
 int connTime[MAXPLAYERS + 1];
-char nextReset[64];
-
-Handle reset = INVALID_HANDLE;
 ConVar gcv_Vip, gcv_VipFlag, gcv_Reset, gcv_Minimum;
+
 
 public Plugin myinfo =  {
 	name = "[ANY] Advanced Admin List", 
 	author = "StrikeR", 
 	description = "", 
-	version = "1.0", 
+	version = "1.1", 
 	url = "https://steamcommunity.com/id/kenmaskimmeod/"
 }
 
@@ -24,47 +30,27 @@ public Plugin myinfo =  {
 
 public void OnPluginStart()
 {
-	CreateConVar("adminlist_version", "1.0", "The current plugin version - do not edit!", FCVAR_SPONLY | FCVAR_NOTIFY | FCVAR_DONTRECORD);
+	CreateConVar("adminlist_version", "1.1", "The current plugin version - do not edit!", FCVAR_SPONLY | FCVAR_NOTIFY | FCVAR_DONTRECORD);
 	gcv_Vip = CreateConVar("sm_admins_vip", "0", "Should VIPs appear in the admin list? 1 - yes, 0 - no.", _, true, 0.0, true, 1.0);
 	gcv_VipFlag = CreateConVar("sm_admins_vipflag", "o", "VIP Flag in letters, as written in admin_levels.cfg");
-	gcv_Reset = CreateConVar("sm_admins_resetime", "604800", "Time in seconds to reset admins' activity.", _, true, 0.0);
+	gcv_Reset = CreateConVar("sm_admins_resetime", "0 0 * * 5", "Crontab code for reset activity.");
 	gcv_Minimum = CreateConVar("sm_admins_minimum", "420", "Minimum time in minutes for admins to be active on the server.", _, true, 0.0);
-	gcv_Reset.AddChangeHook(OnConvarChange);
 	
 	RegConsoleCmd("sm_admins", Command_Admins, "Show online admins.");
-	RegAdminCmd("sm_nextreset", Command_NextReset, ADMFLAG_KICK);
 	RegAdminCmd("sm_hours", Command_Hours, ADMFLAG_KICK);
 	RegAdminCmd("sm_adminstime", Command_AdminsTime, ADMFLAG_ROOT);
+
+	g_hJobsTimer = CreateTimer(60.0, CrontabTimer, _, TIMER_REPEAT);
 	
 	if (SQL_CheckConfig("AdminList"))
 		Database.Connect(SQLCallback_Connect, "AdminList");
 	else
 		SetFailState("[SM] Could not find `AdminList` at databases.cfg");
-	
-	//if (reset == INVALID_HANDLE)
-	//{
-	reset = CreateTimer(float(gcv_Reset.IntValue), Timer_Reset, _, TIMER_REPEAT);
-	char sTime[64];
-	FormatTime(sTime, sizeof(sTime), "%A %d/%m/%G %T", GetTime() + gcv_Reset.IntValue);
-	strcopy(nextReset, sizeof(nextReset), sTime);
-	PrintToServer("-------------------------------------------\n-------------------------------------------");
-	PrintToServer("[Admins] Reset starts at: %s.", sTime);
-	PrintToServer("-------------------------------------------\n-------------------------------------------");
-	//}
 }
 
-public void OnConvarChange(ConVar convar, char[] oldValue, char[] newValue)
+public void OnPluginEnd()
 {
-	if (reset != INVALID_HANDLE)
-		KillTimer(reset);
-	
-	reset = CreateTimer(float(gcv_Reset.IntValue), Timer_Reset, _, TIMER_REPEAT);
-	char sTime[64];
-	FormatTime(sTime, sizeof(sTime), "%A %d/%m/%G %T", GetTime() + gcv_Reset.IntValue);
-	strcopy(nextReset, sizeof(nextReset), sTime);
-	PrintToServer("-------------------------------------------\n-------------------------------------------");
-	PrintToServer("[Admins] Reset starts at: %s.", sTime);
-	PrintToServer("-------------------------------------------\n-------------------------------------------");
+	delete g_hJobsTimer;
 }
 
 public void OnClientPostAdminCheck(int client)
@@ -109,18 +95,6 @@ public Action Command_Hours(int client, int args)
 	GetClientAuthId(client, AuthId_Steam3, auth, sizeof(auth));
 	FormatEx(strQuery, sizeof(strQuery), "SELECT minutes FROM admins WHERE steamid = '%s';", auth);
 	g_hDatabase.Query(SQLCallback_LoadHours, strQuery, GetClientUserId(client));
-	return Plugin_Handled;
-}
-
-public Action Command_NextReset(int client, int args)
-{
-	if (!client)
-	{
-		PrintToServer("This command is in-game only.");
-		return Plugin_Handled;
-	}
-	
-	PrintToChat(client, "\x04[\x01Admins\x04]\x01 Next activity reset: \x03%s\x01.", nextReset);
 	return Plugin_Handled;
 }
 
@@ -207,7 +181,7 @@ public int Handler_Admins(Menu menu, MenuAction action, int client, int Position
 				bool bFounded;
 				char Name[MAX_NAME_LENGTH], flag[2];
 				gcv_VipFlag.GetString(flag, sizeof(flag));
-				int vipflag = GetVIPFlag(flag[0]);
+				int vipflag = ReadFlagString(flag);
 				
 				for (int i = 1; i <= MaxClients; i++)
 				{
@@ -251,69 +225,11 @@ public int Handler_VIP(Handle menu, MenuAction action, int param1, int param2)
 	}
 }
 
-public Action Timer_Reset(Handle timer)
-{
-	SQL_FastQuery(g_hDatabase, "UPDATE admins SET minutes = '0';");
-	char sTime[64];
-	FormatTime(sTime, sizeof(sTime), "%A %d/%m/%G %T", GetTime() + gcv_Reset.IntValue);
-	strcopy(nextReset, sizeof(nextReset), sTime);
-	PrintToServer("-------------------------------------------\n-------------------------------------------");
-	PrintToServer("[Admins] Next reset: %s.", sTime);
-	PrintToServer("-------------------------------------------\n-------------------------------------------");
-	
-	for (int i = 1; i <= MaxClients; i++)
-	{
-		if (IsValidClient(i) && IsAdmin(i))
-		{
-			PrintToChat(i, "\x04[\x01Admins\x04]\x01 Activity has been reset, Next reset: \x03%s\x01.", sTime);
-		}
-	}
-	
-	return Plugin_Continue;
-}
-
 //-----[ Functions ]-----//
 
 bool IsAdmin(int client)
 {
 	return CheckCommandAccess(client, "", ADMFLAG_KICK, true);
-}
-
-int GetVIPFlag(char flag)
-{
-	switch(flag)
-	{
-		case 'a':
-		{
-			return ADMFLAG_RESERVATION;
-		}
-		case 'b':
-		{
-			return ADMFLAG_GENERIC;
-		}
-		case 'o':
-		{
-			return ADMFLAG_CUSTOM1;
-		}
-		case 'p':
-		{
-			return ADMFLAG_CUSTOM2;
-		}
-		case 'q':
-		{
-			return ADMFLAG_CUSTOM3;
-		}
-		case 'r':
-		{
-			return ADMFLAG_CUSTOM4;
-		}
-		case 's':
-		{
-			return ADMFLAG_CUSTOM5;
-		}
-	}
-	
-	return ADMFLAG_CUSTOM6;
 }
 
 bool IsValidClient(int client)
@@ -468,7 +384,92 @@ public void SQLCallback_LoadHours(Database db, DBResultSet results, const char[]
 		return;
 	}
 	
-	results.FetchRow();
-	int dbTime = results.FetchInt(0);
-	PrintToChat(client, "[SM] Your activity: %02d:%02d (+%i minutes when disconnecting).", dbTime / 60, dbTime % 60, RoundToFloor(GetClientTime(client) / 60));
+	if (results.FetchRow())
+	{
+		int dbTime = results.FetchInt(0);
+		PrintToChat(client, "[SM] Your activity: %02d:%02d (+%i minutes when disconnecting).", dbTime / 60, dbTime % 60, RoundToFloor(GetClientTime(client) / 60));
+	}
 } 
+
+//-----[ Crontab ]-----//
+// https://forums.alliedmods.net/showthread.php?p=523298
+
+public Action CrontabTimer(Handle timer)
+{
+	int iJob[5], iMinute, iHour, iDayOfTheWeek, iDayOfTheMonth, iMonth;
+	char convarVal[32], parts[5][5];
+	gcv_Reset.GetString(convarVal, sizeof(convarVal));
+	ExplodeString(convarVal, " ", parts, sizeof(parts), sizeof(parts[]));
+
+	for(int i = 0; i < 5; i++)
+	{
+		if(!strcmp(parts[i], "*"))
+			iJob[i] = ASTERISK;
+		else 
+			iJob[i] = StringToInt(parts[i]);
+	}
+
+	iMinute = getMinute();
+	iHour = getHour();
+	iDayOfTheMonth = getDayOfTheMonth();
+	iMonth = getMonth();
+	iDayOfTheWeek = getDayOfTheWeek();
+
+	if (((iJob[JOB_MINUTE] == iMinute) || (iJob[JOB_MINUTE] == ASTERISK)) && 
+		((iJob[JOB_HOUR] == iHour) || (iJob[JOB_HOUR] == ASTERISK)) && 
+		((iJob[JOB_DAY_OF_THE_MONTH] == iDayOfTheMonth) || (iJob[JOB_DAY_OF_THE_MONTH] == ASTERISK)) && 
+		((iJob[JOB_MONTH] == iMonth) || (iJob[JOB_MONTH] == ASTERISK)) && 
+		((iJob[JOB_DAY_OF_THE_WEEK] == iDayOfTheWeek) || (iJob[JOB_DAY_OF_THE_WEEK] == ASTERISK)))
+	{
+		SQL_FastQuery(g_hDatabase, "UPDATE admins SET minutes = '0';");
+		PrintToServer("-------------------------------------------\n-------------------------------------------");
+		PrintToServer("[Admins] Reset has been executed.");
+		PrintToServer("-------------------------------------------\n-------------------------------------------");
+
+		for (int i = 1; i <= MaxClients; i++)
+		{
+			if (IsValidClient(i) && IsAdmin(i))
+			{
+				PrintToChat(i, "\x04[\x01Admins\x04]\x01 Activity has been reset.");
+			}
+		}
+	}
+	
+	return Plugin_Continue;
+}
+
+stock int getMinute()
+{
+	char szMinute[3] = "";
+	FormatTime(szMinute, sizeof(szMinute), "%M");
+	return StringToInt(szMinute);
+}
+
+stock int getHour()
+{
+	char szHour[3] = "";
+	FormatTime(szHour, sizeof(szHour), "%H");
+	return StringToInt(szHour);
+}
+
+stock int getDayOfTheWeek()
+{
+	char szDayOfTheWeek[3] = "";
+	FormatTime(szDayOfTheWeek, sizeof(szDayOfTheWeek), "%w");
+	return StringToInt(szDayOfTheWeek);
+}
+
+stock int getMonth()
+{
+	char szMonth[3] = "";
+	FormatTime(szMonth, sizeof(szMonth), "%m");
+	return StringToInt(szMonth);
+}
+
+stock int getDayOfTheMonth()
+{
+	char szDayOfMonth[3] = "";
+	FormatTime(szDayOfMonth, sizeof(szDayOfMonth), "%d");
+	return StringToInt(szDayOfMonth);
+}
+
