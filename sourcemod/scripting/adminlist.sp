@@ -22,7 +22,7 @@ public Plugin myinfo =  {
 	name = "[ANY] Advanced Admin List", 
 	author = "StrikeR", 
 	description = "", 
-	version = "1.1", 
+	version = "1.1.1", 
 	url = "https://steamcommunity.com/id/kenmaskimmeod/"
 }
 
@@ -30,7 +30,7 @@ public Plugin myinfo =  {
 
 public void OnPluginStart()
 {
-	CreateConVar("adminlist_version", "1.1", "The current plugin version - do not edit!", FCVAR_SPONLY | FCVAR_NOTIFY | FCVAR_DONTRECORD);
+	CreateConVar("adminlist_version", "1.1.1", "The current plugin version - do not edit!", FCVAR_SPONLY | FCVAR_NOTIFY | FCVAR_DONTRECORD);
 	gcv_Vip = CreateConVar("sm_admins_vip", "0", "Should VIPs appear in the admin list? 1 - yes, 0 - no.", _, true, 0.0, true, 1.0);
 	gcv_VipFlag = CreateConVar("sm_admins_vipflag", "o", "VIP Flag in letters, as written in admin_levels.cfg");
 	gcv_Reset = CreateConVar("sm_admins_resetime", "0 0 * * 5", "Crontab code for reset activity.");
@@ -229,7 +229,8 @@ public int Handler_VIP(Handle menu, MenuAction action, int param1, int param2)
 
 bool IsAdmin(int client)
 {
-	return CheckCommandAccess(client, "", ADMFLAG_KICK, true);
+	AdminId id = GetUserAdmin(client);
+	return id != INVALID_ADMIN_ID && id.HasFlag(Admin_Kick);
 }
 
 bool IsValidClient(int client)
@@ -239,14 +240,16 @@ bool IsValidClient(int client)
 
 void ShowToPlayer(Menu &menu)
 {
-	int count;
+	bool here;
+
 	for (int i = 1; i <= MaxClients; i++)
 	{
 		if (IsValidClient(i) && IsAdmin(i))
 		{
 			if (isVisible[i])
 			{
-				count++;
+				here = true;
+
 				if (CheckCommandAccess(i, "", ADMFLAG_ROOT))
 				{
 					char name[MAX_NAME_LENGTH + 10];
@@ -263,7 +266,7 @@ void ShowToPlayer(Menu &menu)
 		}
 	}
 	
-	if (!count)
+	if (!here)
 	{
 		menu.AddItem("X", "No admins are currently online.");
 	}
