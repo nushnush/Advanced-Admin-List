@@ -74,10 +74,14 @@ public void OnClientDisconnect(int client)
 		GetClientAuthId(client, AuthId_Steam3, auth, sizeof(auth));
 		FormatEx(strQuery, sizeof(strQuery), "SELECT * FROM admins WHERE steamid = '%s';", auth);
 		DBResultSet results = SQL_Query(g_hDatabase, strQuery);
-		int updatedValue = results.FetchInt(3) + (GetTime() - connTime[client]) / 60;
-		FormatTime(sTime, sizeof(sTime), "%A %d/%m/%G %T", GetTime());
-		FormatEx(strQuery, sizeof(strQuery), "UPDATE admins SET name = '%N', minutes = %i, lastLogin = '%s' WHERE steamid = '%s';", client, updatedValue, sTime, auth);
-		SQL_FastQuery(g_hDatabase, strQuery);
+		if(results.FetchRow())
+		{
+			int updatedValue = results.FetchInt(3) + (GetTime() - connTime[client]) / 60;
+			FormatTime(sTime, sizeof(sTime), "%A %d/%m/%G %T", GetTime());
+			FormatEx(strQuery, sizeof(strQuery), "UPDATE admins SET name = '%N', minutes = %i, lastLogin = '%s' WHERE steamid = '%s';", client, updatedValue, sTime, auth);
+			SQL_FastQuery(g_hDatabase, strQuery);
+		}
+		delete results;
 	}
 }
 
