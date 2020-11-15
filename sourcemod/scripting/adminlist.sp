@@ -15,14 +15,14 @@ Database g_hDatabase = null;
 Handle g_hJobsTimer;
 bool isVisible[MAXPLAYERS + 1] =  { true, ... };
 int connTime[MAXPLAYERS + 1];
-ConVar gcv_Vip, gcv_VipFlag, gcv_Reset, gcv_Minimum;
-
+AdminFlag adm = Admin_Kick;
+ConVar gcv_Vip, gcv_VipFlag, gcv_AdminFlag, gcv_Reset, gcv_Minimum;
 
 public Plugin myinfo =  {
 	name = "[ANY] Advanced Admin List", 
 	author = "StrikeR", 
 	description = "", 
-	version = "1.1.1", 
+	version = "1.1.3", 
 	url = "https://steamcommunity.com/id/kenmaskimmeod/"
 }
 
@@ -30,11 +30,15 @@ public Plugin myinfo =  {
 
 public void OnPluginStart()
 {
-	CreateConVar("adminlist_version", "1.1.1", "The current plugin version - do not edit!", FCVAR_SPONLY | FCVAR_NOTIFY | FCVAR_DONTRECORD);
+	CreateConVar("adminlist_version", "1.1.3", "The current plugin version - do not edit!", FCVAR_SPONLY | FCVAR_NOTIFY | FCVAR_DONTRECORD);
 	gcv_Vip = CreateConVar("sm_admins_vip", "0", "Should VIPs appear in the admin list? 1 - yes, 0 - no.", _, true, 0.0, true, 1.0);
-	gcv_VipFlag = CreateConVar("sm_admins_vipflag", "o", "VIP Flag in letters, as written in admin_levels.cfg");
+	gcv_VipFlag = CreateConVar("sm_admins_vipflag", "o", "VIP Flag as a letter, as written in admin_levels.cfg");
+	gcv_AdminFlag = CreateConVar("sm_admins_adminflag", "c", "Admin Flag as a letter, as written in admin_levels.cfg");
 	gcv_Reset = CreateConVar("sm_admins_resetime", "0 0 * * 5", "Crontab code for reset activity.");
 	gcv_Minimum = CreateConVar("sm_admins_minimum", "420", "Minimum time in minutes for admins to be active on the server.", _, true, 0.0);
+
+	gcv_AdminFlag.AddChangeHook(OnChanged);
+	adm = Admin_Kick;
 	
 	RegConsoleCmd("sm_admins", Command_Admins, "Show online admins.");
 	RegAdminCmd("sm_hours", Command_Hours, ADMFLAG_KICK);
@@ -51,6 +55,14 @@ public void OnPluginStart()
 public void OnPluginEnd()
 {
 	delete g_hJobsTimer;
+}
+
+public void OnChanged(ConVar convar, const char[] oldValue, const char[] newValue)
+{
+	char flag[2];
+	gcv_AdminFlag.GetString(flag, sizeof(flag));
+	int admflag = ReadFlagString(flag);
+	BitToFlag(admflag, adm);
 }
 
 public void OnClientPostAdminCheck(int client)
@@ -234,7 +246,7 @@ public int Handler_VIP(Handle menu, MenuAction action, int param1, int param2)
 bool IsAdmin(int client)
 {
 	AdminId id = GetUserAdmin(client);
-	return id != INVALID_ADMIN_ID && id.HasFlag(Admin_Kick);
+	return id != INVALID_ADMIN_ID && id.HasFlag(adm);
 }
 
 bool IsValidClient(int client)
