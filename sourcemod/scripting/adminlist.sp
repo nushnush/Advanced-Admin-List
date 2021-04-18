@@ -19,10 +19,10 @@ AdminFlag adm = Admin_Kick;
 ConVar gcv_Vip, gcv_VipFlag, gcv_AdminFlag, gcv_Reset, gcv_Minimum;
 
 public Plugin myinfo =  {
-	name = "[ANY] Advanced Admin List", 
-	author = "StrikeR", 
-	description = "", 
-	version = "1.1.3", 
+	name = "[ANY] Advanced Admin List",
+	author = "StrikeR",
+	description = "",
+	version = "1.1.4",
 	url = "https://steamcommunity.com/id/kenmaskimmeod/"
 }
 
@@ -73,7 +73,7 @@ public void OnClientPostAdminCheck(int client)
 		
 		char auth[32], strQuery[128];
 		GetClientAuthId(client, AuthId_Steam3, auth, sizeof(auth));
-		FormatEx(strQuery, sizeof(strQuery), "SELECT * FROM admins WHERE steamid = '%s';", auth);
+		g_hDatabase.Format(strQuery, sizeof(strQuery), "SELECT * FROM admins WHERE steamid = '%s';", auth);
 		g_hDatabase.Query(SQLCallback_LoadUser, strQuery, GetClientUserId(client));
 	}
 }
@@ -84,13 +84,13 @@ public void OnClientDisconnect(int client)
 	{
 		char strQuery[512], auth[32], sTime[64];
 		GetClientAuthId(client, AuthId_Steam3, auth, sizeof(auth));
-		FormatEx(strQuery, sizeof(strQuery), "SELECT * FROM admins WHERE steamid = '%s';", auth);
+		g_hDatabase.Format(strQuery, sizeof(strQuery), "SELECT * FROM admins WHERE steamid = '%s';", auth);
 		DBResultSet results = SQL_Query(g_hDatabase, strQuery);
-		if(results.FetchRow())
+		if(results != null && results.FetchRow())
 		{
 			int updatedValue = results.FetchInt(3) + (GetTime() - connTime[client]) / 60;
 			FormatTime(sTime, sizeof(sTime), "%A %d/%m/%G %T", GetTime());
-			FormatEx(strQuery, sizeof(strQuery), "UPDATE admins SET name = '%N', minutes = %i, lastLogin = '%s' WHERE steamid = '%s';", client, updatedValue, sTime, auth);
+			g_hDatabase.Format(strQuery, sizeof(strQuery), "UPDATE admins SET name = '%N', minutes = %i, lastLogin = '%s' WHERE steamid = '%s';", client, updatedValue, sTime, auth);
 			SQL_FastQuery(g_hDatabase, strQuery);
 		}
 		delete results;
@@ -109,7 +109,7 @@ public Action Command_Hours(int client, int args)
 	
 	char auth[32], strQuery[128];
 	GetClientAuthId(client, AuthId_Steam3, auth, sizeof(auth));
-	FormatEx(strQuery, sizeof(strQuery), "SELECT minutes FROM admins WHERE steamid = '%s';", auth);
+	g_hDatabase.Format(strQuery, sizeof(strQuery), "SELECT minutes FROM admins WHERE steamid = '%s';", auth);
 	g_hDatabase.Query(SQLCallback_LoadHours, strQuery, GetClientUserId(client));
 	return Plugin_Handled;
 }
@@ -162,7 +162,7 @@ public Action Command_Admins(int client, int args)
 		
 		char auth[32], strQuery[128];
 		GetClientAuthId(client, AuthId_Steam3, auth, sizeof(auth));
-		FormatEx(strQuery, sizeof(strQuery), "UPDATE admins SET visible = '%s' WHERE steamid = '%s';", val[0], auth);
+		g_hDatabase.Format(strQuery, sizeof(strQuery), "UPDATE admins SET visible = '%s' WHERE steamid = '%s';", val[0], auth);
 		SQL_FastQuery(g_hDatabase, strQuery);
 		menu.Display(client, 20);
 	}
@@ -349,7 +349,7 @@ public void SQLCallback_LoadUser(Database db, DBResultSet results, const char[] 
 		{
 			char strQuery[128], auth[32];
 			GetClientAuthId(client, AuthId_Steam3, auth, sizeof(auth));
-			FormatEx(strQuery, sizeof(strQuery), "DELETE FROM admins WHERE steamid = '%s';", auth);
+			g_hDatabase.Format(strQuery, sizeof(strQuery), "DELETE FROM admins WHERE steamid = '%s';", auth);
 			SQL_FastQuery(g_hDatabase, strQuery);
 		}
 		else // still admin
@@ -363,7 +363,7 @@ public void SQLCallback_LoadUser(Database db, DBResultSet results, const char[] 
 	{
 		char auth[32], strQuery[256];
 		GetClientAuthId(client, AuthId_Steam3, auth, sizeof(auth));
-		FormatEx(strQuery, sizeof(strQuery), "INSERT INTO admins (steamid, name, minutes, lastLogin, visible) VALUES ('%s', '%N', '0', '0', '1');", auth, client);
+		g_hDatabase.Format(strQuery, sizeof(strQuery), "INSERT INTO admins (steamid, name, minutes, lastLogin, visible) VALUES ('%s', '%N', '0', '0', '1');", auth, client);
 		SQL_FastQuery(g_hDatabase, strQuery);
 		
 		PrintToChat(client, "[SM] Ahoy there admin! Your activity is being logged starting from now.");
